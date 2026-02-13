@@ -15,14 +15,21 @@ export const useGetTasks = ({ workspaceId, projectId, status, search, assigneeId
   const query = useQuery({
     queryKey: ['tasks', workspaceId, projectId, status, search, assigneeId],
     queryFn: async () => {
+      const queryParams: {
+        workspaceId: string;
+        projectId?: string;
+        status?: TaskStatus;
+        search?: string;
+        assigneeId?: string;
+      } = { workspaceId };
+
+      if (projectId) queryParams.projectId = projectId;
+      if (status) queryParams.status = status;
+      if (search) queryParams.search = search;
+      if (assigneeId) queryParams.assigneeId = assigneeId;
+
       const response = await client.api.tasks.$get({
-        query: {
-          workspaceId,
-          projectId: projectId ?? undefined,
-          status: status ?? undefined,
-          search: search ?? undefined,
-          assigneeId: assigneeId ?? undefined,
-        },
+        query: queryParams,
       });
 
       if (!response.ok) throw new Error('Failed to fetch tasks.');
