@@ -13,6 +13,12 @@ import { createSupabaseClient } from '@/lib/supabase';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
+type SupabaseCookie = {
+  name: string;
+  value: string;
+  options?: Parameters<typeof setCookie>[3];
+};
+
 const app = new Hono()
   .get(
     '/callback',
@@ -31,7 +37,7 @@ const app = new Hono()
             const all = getCookie(ctx);
             return Object.entries(all ?? {}).map(([name, value]) => ({ name, value }));
           },
-          setAll: (cookies) => {
+          setAll: (cookies: SupabaseCookie[]) => {
             cookies.forEach(({ name, value, options }) => {
               setCookie(ctx, name, value, options as Parameters<typeof setCookie>[3]);
             });
