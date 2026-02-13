@@ -42,7 +42,7 @@ export const DatePicker = ({
       </PopoverTrigger>
 
       <PopoverContent className="w-auto p-0">
-        <Calendar mode="single" selected={value} onSelect={(date) => onChange(date as Date)} initialFocus />
+        <Calendar mode="single" selected={value} onSelect={(date: Date | undefined) => onChange(date ?? null)} initialFocus />
 
         {showReset && value && (
           <PopoverClose asChild>
