@@ -5,7 +5,7 @@ import type { Provider } from '@supabase/supabase-js';
 import { supabaseBrowser } from '@/lib/supabase-browser';
 
 export async function onOAuth(provider: Provider) {
-  const origin = window.location.origin;
+  const origin = process.env.NEXT_PUBLIC_APP_BASE_URL ?? window.location.origin;
 
   const { data, error } = await supabaseBrowser.auth.signInWithOAuth({
     provider,
