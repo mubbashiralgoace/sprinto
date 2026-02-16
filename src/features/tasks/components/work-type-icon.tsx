@@ -28,5 +28,5 @@ interface WorkTypeIconProps {
 export const WorkTypeIcon = ({ type, className }: WorkTypeIconProps) => {
   const Icon = workTypeIconMap[type];
 
-  return <Icon className={cn('size-4', workTypeIconClassMap[type], className)} />;
+  return <Icon className={cn('size-4 shrink-0', workTypeIconClassMap[type], className)} />;
 };

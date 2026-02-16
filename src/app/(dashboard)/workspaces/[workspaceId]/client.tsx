@@ -10,6 +10,7 @@ import { PageError } from '@/components/page-error';
 import { PageLoader } from '@/components/page-loader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { useCurrent } from '@/features/auth/api/use-current';
 import { useGetMembers } from '@/features/members/api/use-get-members';
 import { MemberAvatar } from '@/features/members/components/member-avatar';
 import type { Member } from '@/features/members/types';
@@ -27,11 +28,20 @@ import { useWorkspaceId } from '@/features/workspaces/hooks/use-workspace-id';
 
 export const WorkspaceIdClient = () => {
   const workspaceId = useWorkspaceId();
+  const { data: currentUser } = useCurrent();
 
   const { data: workspaceAnalytics, isLoading: isLoadingAnalytics } = useGetWorkspaceAnalytics({ workspaceId });
-  const { data: tasks, isLoading: isLoadingTasks } = useGetTasks({ workspaceId });
-  const { data: projects, isLoading: isLoadingProjects } = useGetProjects({ workspaceId });
   const { data: members, isLoading: isLoadingMembers } = useGetMembers({ workspaceId });
+  const { data: projects, isLoading: isLoadingProjects } = useGetProjects({ workspaceId });
+
+  // Find current user's member ID
+  const currentMember = members?.documents.find((member) => member.userId === currentUser?.$id);
+  const currentMemberId = currentMember?.$id;
+
+  const { data: tasks, isLoading: isLoadingTasks } = useGetTasks({
+    workspaceId,
+    assigneeId: currentMemberId,
+  });
 
   const isLoading = isLoadingAnalytics || isLoadingTasks || isLoadingProjects || isLoadingMembers;
 

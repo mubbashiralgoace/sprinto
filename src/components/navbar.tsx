@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation';
 
 import { UserButton } from '@/features/auth/components/user-button';
+import { NotificationsMenu } from '@/features/notifications/components/notifications-menu';
 
 import { MobileSidebar } from './mobile-sidebar';
 
@@ -39,7 +40,8 @@ export const Navbar = () => {
 
       <MobileSidebar />
 
-      <div className="flex items-center gap-x-2.5 cursor-pointer">
+      <div className="flex items-center gap-x-2.5">
+        <NotificationsMenu />
         <UserButton />
       </div>
     </nav>

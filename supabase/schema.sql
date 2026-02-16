@@ -66,10 +66,30 @@ create table if not exists public.task_history (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.notifications (
+  id uuid primary key default gen_random_uuid(),
+  "workspaceId" uuid not null references public.workspaces(id) on delete cascade,
+  "userId" uuid not null references auth.users(id) on delete cascade,
+  "actorId" uuid references public.members(id) on delete set null,
+  "taskId" uuid references public.tasks(id) on delete set null,
+  type text not null,
+  title text not null,
+  body text not null default '',
+  link text,
+  metadata jsonb not null default '{}'::jsonb,
+  read_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create index if not exists idx_task_comments_task on public.task_comments ("taskId");
 create index if not exists idx_task_comments_member on public.task_comments ("memberId");
 create index if not exists idx_task_history_task on public.task_history ("taskId");
 create index if not exists idx_task_history_member on public.task_history ("memberId");
+
+create index if not exists idx_notifications_user on public.notifications ("userId");
+create index if not exists idx_notifications_workspace on public.notifications ("workspaceId");
+create index if not exists idx_notifications_read on public.notifications (read_at);
 
 create index if not exists idx_members_workspace on public.members ("workspaceId");
 create index if not exists idx_members_user on public.members ("userId");

@@ -2,7 +2,7 @@ import { zValidator } from '@hono/zod-validator';
 import { Hono } from 'hono';
 import { z } from 'zod';
 
-import { IMAGES_BUCKET, MEMBERS_TABLE, PROJECTS_TABLE, TASKS_TABLE, TASK_COMMENTS_TABLE, TASK_HISTORY_TABLE } from '@/config/db';
+import { IMAGES_BUCKET, MEMBERS_TABLE, NOTIFICATIONS_TABLE, PROJECTS_TABLE, TASKS_TABLE, TASK_COMMENTS_TABLE, TASK_HISTORY_TABLE } from '@/config/db';
 import { getMember } from '@/features/members/utils';
 import type { Project } from '@/features/projects/types';
 import { createTaskSchema } from '@/features/tasks/schema';
@@ -42,6 +42,103 @@ const buildProjectCode = (projectName: string) => {
 };
 
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const mentionEmailRegex = /@([\w.+-]+@[\w.-]+\.[A-Za-z]{2,})/g;
+
+const extractMentionEmails = (text: string) => {
+  const matches = text.matchAll(mentionEmailRegex);
+  const emails = new Set<string>();
+
+  for (const match of matches) {
+    if (match[1]) emails.add(match[1].toLowerCase());
+  }
+
+  return [...emails];
+};
+
+const getMemberUser = async (supabase: any, memberId?: string | null) => {
+  if (!memberId) return null;
+
+  const { data: member } = await supabase.from(MEMBERS_TABLE).select('id,userId').eq('id', memberId).single();
+
+  if (!member) return null;
+
+  const { data: userData } = await supabase.auth.admin.getUserById(member.userId);
+  const name =
+    userData.user?.user_metadata?.full_name ??
+    userData.user?.user_metadata?.name ??
+    userData.user?.email?.split('@')[0] ??
+    'User';
+
+  return {
+    memberId: member.id,
+    userId: member.userId,
+    name,
+    email: userData.user?.email ?? '',
+  };
+};
+
+const createNotification = async ({
+  supabase,
+  userId,
+  workspaceId,
+  actorId,
+  taskId,
+  type,
+  title,
+  body,
+  link,
+  metadata,
+}: {
+  supabase: any;
+  userId: string;
+  workspaceId: string;
+  actorId?: string | null;
+  taskId?: string | null;
+  type: string;
+  title: string;
+  body: string;
+  link?: string | null;
+  metadata?: Record<string, unknown>;
+}) => {
+  await supabase.from(NOTIFICATIONS_TABLE).insert({
+    userId,
+    workspaceId,
+    actorId,
+    taskId,
+    type,
+    title,
+    body,
+    link: link ?? null,
+    metadata: metadata ?? {},
+  });
+};
+
+const sendNotificationEmail = async ({
+  supabase,
+  to,
+  subject,
+  html,
+}: {
+  supabase: any;
+  to: string | null | undefined;
+  subject: string;
+  html: string;
+}) => {
+  if (!to) return;
+
+  try {
+    await supabase.functions.invoke('send-notification-email', {
+      body: {
+        to,
+        subject,
+        html,
+      },
+    });
+  } catch (error) {
+    console.error('[NOTIFICATION_EMAIL_ERROR]:', error);
+  }
+};
 
 const getNextTaskCode = async ({
   supabase,
@@ -308,7 +405,11 @@ const app = new Hono()
       const user = ctx.get('user');
       const { body, attachments } = ctx.req.valid('json');
 
-      const { data: task } = await supabase.from(TASKS_TABLE).select('id,workspaceId').eq('id', taskId).single();
+      const { data: task } = await supabase
+        .from(TASKS_TABLE)
+        .select('id,workspaceId,assigneeId,reporterId,name,summary,projectId')
+        .eq('id', taskId)
+        .single();
       if (!task) return ctx.json({ error: 'Task not found.' }, 404);
 
       const member = await getMember({
@@ -331,6 +432,86 @@ const app = new Hono()
         .single();
 
       if (!comment) return ctx.json({ error: 'Failed to create comment.' }, 400);
+
+      try {
+        const notificationLink = `/workspaces/${task.workspaceId}/tasks`;
+        const actorName = user.name;
+        const taskName = task.name ?? 'Task';
+        const taskSummary = task.summary ?? '';
+
+        const recipients = new Map<string, { userId: string; email: string }>();
+        const mentionedRecipients = new Set<string>();
+
+        const assigneeUser = await getMemberUser(supabase, task.assigneeId);
+        const reporterUser = await getMemberUser(supabase, task.reporterId);
+
+        if (assigneeUser && assigneeUser.userId !== user.$id) {
+          recipients.set(assigneeUser.userId, { userId: assigneeUser.userId, email: assigneeUser.email });
+        }
+
+        if (reporterUser && reporterUser.userId !== user.$id) {
+          recipients.set(reporterUser.userId, { userId: reporterUser.userId, email: reporterUser.email });
+        }
+
+        const mentionEmails = extractMentionEmails(body);
+
+        if (mentionEmails.length > 0) {
+          const { data: members } = await supabase.from(MEMBERS_TABLE).select('id,userId').eq('workspaceId', task.workspaceId);
+          const memberDocs = toDocuments(members ?? []);
+
+          const membersWithUsers = await Promise.all(
+            memberDocs.map(async (memberItem) => {
+              const { data: userData } = await supabase.auth.admin.getUserById(memberItem.userId);
+
+              return {
+                userId: memberItem.userId,
+                email: userData.user?.email?.toLowerCase() ?? '',
+              };
+            }),
+          );
+
+          membersWithUsers.forEach((memberItem) => {
+            if (!memberItem.email) return;
+            if (mentionEmails.includes(memberItem.email)) {
+              if (memberItem.userId !== user.$id) {
+                recipients.set(memberItem.userId, { userId: memberItem.userId, email: memberItem.email });
+                mentionedRecipients.add(memberItem.userId);
+              }
+            }
+          });
+        }
+
+        for (const recipient of recipients.values()) {
+          const isMention = mentionedRecipients.has(recipient.userId);
+          const title = isMention ? `${actorName} mentioned you in ${taskName}` : `${actorName} commented on ${taskName}`;
+          const bodyText = taskSummary ? taskSummary : 'New comment added.';
+
+          await createNotification({
+            supabase,
+            userId: recipient.userId,
+            workspaceId: task.workspaceId,
+            actorId: member.$id,
+            taskId: task.id,
+            type: isMention ? 'mentioned' : 'comment_added',
+            title,
+            body: bodyText,
+            link: notificationLink,
+            metadata: {
+              taskId: task.id,
+              projectId: task.projectId,
+            },
+          });
+
+          await sendNotificationEmail({
+            supabase,
+            to: recipient.email,
+            subject: title,
+            html: `<p>${title}</p><p>${bodyText}</p>`,
+          });
+        }
+      } catch (error) {
+        console.error('[TASK_COMMENT_NOTIFICATION_ERROR]:', error);
+      }
 
       return ctx.json({ data: toDocument(comment) });
     },
@@ -392,6 +573,41 @@ const app = new Hono()
       fromValue: null,
       toValue: null,
     });
+
+    try {
+      const assigneeUser = await getMemberUser(supabase, assigneeId);
+
+      if (assigneeUser && assigneeUser.userId !== user.$id) {
+        const title = `${user.name} created ${task.name}`;
+        const bodyText = task.summary ?? '';
+        const notificationLink = `/workspaces/${workspaceId}/tasks`;
+
+        await createNotification({
+          supabase,
+          userId: assigneeUser.userId,
+          workspaceId,
+          actorId: member.$id,
+          taskId: task.id,
+          type: 'task_created',
+          title,
+          body: bodyText,
+          link: notificationLink,
+          metadata: {
+            taskId: task.id,
+            projectId: task.projectId,
+          },
+        });
+
+        await sendNotificationEmail({
+          supabase,
+          to: assigneeUser.email,
+          subject: title,
+          html: `<p>${title}</p><p>${bodyText}</p>`,
+        });
+      }
+    } catch (error) {
+      console.error('[TASK_CREATE_NOTIFICATION_ERROR]:', error);
+    }
 
     return ctx.json({ data: toDocument(task) });
   })
@@ -468,6 +684,43 @@ const app = new Hono()
           toValue: entry.toValue,
         })),
       );
+    }
+
+    if (assigneeId !== undefined && assigneeId !== existingTask.assigneeId) {
+      try {
+        const assigneeUser = await getMemberUser(supabase, assigneeId);
+
+        if (assigneeUser && assigneeUser.userId !== user.$id) {
+          const title = `${user.name} assigned you ${task.name}`;
+          const bodyText = task.summary ?? '';
+          const notificationLink = `/workspaces/${task.workspaceId}/tasks`;
+
+          await createNotification({
+            supabase,
+            userId: assigneeUser.userId,
+            workspaceId: task.workspaceId,
+            actorId: member.$id,
+            taskId: task.id,
+            type: 'task_assigned',
+            title,
+            body: bodyText,
+            link: notificationLink,
+            metadata: {
+              taskId: task.id,
+              projectId: task.projectId,
+            },
+          });
+
+          await sendNotificationEmail({
+            supabase,
+            to: assigneeUser.email,
+            subject: title,
+            html: `<p>${title}</p><p>${bodyText}</p>`,
+          });
+        }
+      } catch (error) {
+        console.error('[TASK_ASSIGN_NOTIFICATION_ERROR]:', error);
+      }
     }
 
     return ctx.json({ data: toDocument(task) });

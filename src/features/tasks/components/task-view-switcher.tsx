@@ -2,7 +2,7 @@
 
 import { Loader2, PlusIcon } from 'lucide-react';
 import { useQueryState } from 'nuqs';
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 
 import { DottedSeparator } from '@/components/dotted-separator';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,7 @@ import { useBulkUpdateTasks } from '@/features/tasks/api/use-bulk-update-tasks';
 import { useGetTasks } from '@/features/tasks/api/use-get-tasks';
 import { useCreateTaskModal } from '@/features/tasks/hooks/use-create-task-modal';
 import { useTaskFilters } from '@/features/tasks/hooks/use-task-filters';
-import type { TaskStatus } from '@/features/tasks/types';
+import type { Task, TaskStatus } from '@/features/tasks/types';
 import { useWorkspaceId } from '@/features/workspaces/hooks/use-workspace-id';
 
 import { columns } from './columns';
@@ -20,6 +20,7 @@ import { DataFilters } from './data-filters';
 import { DataKanban } from './data-kanban';
 import { DataSearch } from './data-search';
 import { DataTable } from './data-table';
+import { TaskDetailsModal } from './task-details-modal';
 
 interface TaskViewSwitcherProps {
   projectId?: string;
@@ -30,6 +31,7 @@ export const TaskViewSwitcher = ({ projectId, hideProjectFilter }: TaskViewSwitc
   const [view, setView] = useQueryState('task-view', {
     defaultValue: 'table',
   });
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [{ status, assigneeId, projectId: filteredProjectId, search }] = useTaskFilters();
 
   const workspaceId = useWorkspaceId();
@@ -93,7 +95,7 @@ export const TaskViewSwitcher = ({ projectId, hideProjectFilter }: TaskViewSwitc
         ) : (
           <>
             <TabsContent value="table" className="mt-0">
-              <DataTable columns={columns} data={tasks?.documents ?? []} />
+              <DataTable columns={columns} data={tasks?.documents ?? []} onRowClick={(task) => setSelectedTask(task)} />
             </TabsContent>
 
             <TabsContent value="kanban" className="mt-0">
@@ -103,6 +105,16 @@ export const TaskViewSwitcher = ({ projectId, hideProjectFilter }: TaskViewSwitc
             <TabsContent value="calendar" className="mt-0 h-full pb-4">
               <DataCalendar data={tasks?.documents ?? []} />
             </TabsContent>
+
+            {selectedTask ? (
+              <TaskDetailsModal
+                task={selectedTask}
+                open={!!selectedTask}
+                onOpenChangeAction={(open) => {
+                  if (!open) setSelectedTask(null);
+                }}
+              />
+            ) : null}
           </>
         )}
       </div>
