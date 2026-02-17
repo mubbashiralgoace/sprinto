@@ -6,7 +6,7 @@ import { IMAGES_BUCKET, MEMBERS_TABLE, NOTIFICATIONS_TABLE, PROJECTS_TABLE, TASK
 import { getMember } from '@/features/members/utils';
 import type { Project } from '@/features/projects/types';
 import { createTaskSchema } from '@/features/tasks/schema';
-import { TaskStatus, type Task } from '@/features/tasks/types';
+import { TASK_STATUS_LABELS, TASK_WORK_TYPE_LABELS, TaskStatus, TaskWorkType, type Task } from '@/features/tasks/types';
 import { sessionMiddleware } from '@/lib/session-middleware';
 import { toDocument, toDocuments } from '@/lib/supabase';
 
@@ -76,6 +76,179 @@ const getMemberUser = async (supabase: any, memberId?: string | null) => {
     name,
     email: userData.user?.email ?? '',
   };
+};
+
+const escapeHtml = (value: string) =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+const formatEmailText = (value?: string | null) => {
+  if (!value) return '';
+  return escapeHtml(value).replace(/\n/g, '<br />');
+};
+
+const getAbsoluteUrl = (path?: string | null) => {
+  if (!path) return '';
+  if (/^https?:\/\//i.test(path)) return path;
+
+  const baseUrl = (process.env.NEXT_PUBLIC_APP_BASE_URL ?? '').replace(/\/+$/, '');
+  if (!baseUrl) return path;
+
+  return `${baseUrl}${path.startsWith('/') ? '' : '/'}${path}`;
+};
+
+const formatStatusLabel = (status?: TaskStatus | null) => {
+  if (!status) return '';
+  return TASK_STATUS_LABELS[status] ?? status;
+};
+
+const formatWorkTypeLabel = (workType?: TaskWorkType | null) => {
+  if (!workType) return '';
+  return TASK_WORK_TYPE_LABELS[workType] ?? workType;
+};
+
+const buildNotificationEmailHtml = ({
+  title,
+  body,
+  taskName,
+  taskSummary,
+  status,
+  workType,
+  assignee,
+  reporter,
+  priority,
+  description,
+  link,
+  showEmptyMeta = true,
+}: {
+  title: string;
+  body: string;
+  taskName?: string | null;
+  taskSummary?: string | null;
+  status?: TaskStatus | null;
+  workType?: TaskWorkType | null;
+  assignee?: string | null;
+  reporter?: string | null;
+  priority?: string | null;
+  description?: string | null;
+  link?: string | null;
+  showEmptyMeta?: boolean;
+}) => {
+  const statusLabel = formatStatusLabel(status);
+  const workTypeLabel = formatWorkTypeLabel(workType);
+  const linkUrl = getAbsoluteUrl(link);
+
+  const safeTitle = escapeHtml(title);
+  const safeBody = formatEmailText(body || '');
+  const safeTaskName = escapeHtml(taskName ?? '');
+  const safeTaskSummary = escapeHtml(taskSummary ?? '');
+  const safeDescription = formatEmailText(description ?? '');
+
+  const detailItems = [
+    { label: 'Status', value: statusLabel },
+    { label: 'Work type', value: workTypeLabel },
+    { label: 'Assignee', value: assignee ?? '' },
+    { label: 'Priority', value: priority ?? '' },
+    { label: 'Reporter', value: reporter ?? '' },
+  ];
+
+  const detailRows = detailItems
+    .filter((item) => showEmptyMeta || item.value)
+    .map((item) => {
+      const value = item.value ? escapeHtml(item.value) : '-';
+      return `
+        <tr>
+          <td style="width:140px;padding:6px 0;color:#5e6c84;font-size:12px;vertical-align:top;">${item.label}</td>
+          <td style="padding:6px 0;color:#172b4d;font-size:14px;vertical-align:top;">${value}</td>
+        </tr>
+      `;
+    })
+    .join('');
+
+  const statusBadge = statusLabel
+    ? `<span style="display:inline-block;padding:4px 10px;border-radius:999px;background:#e6f0ff;color:#0747a6;font-size:12px;font-weight:600;">${escapeHtml(
+        statusLabel,
+      )}</span>`
+    : '';
+
+  const descriptionSection = safeDescription
+    ? `
+      <tr>
+        <td style="padding:0 24px 24px 24px;">
+          <div style="font-size:13px;color:#5e6c84;font-weight:600;margin-bottom:8px;">Description</div>
+          <div style="font-size:14px;line-height:1.5;color:#172b4d;">${safeDescription}</div>
+        </td>
+      </tr>
+    `
+    : '';
+
+  const ctaButton = linkUrl
+    ? `
+      <a href="${escapeHtml(linkUrl)}" style="display:inline-block;background:#0052cc;color:#ffffff;text-decoration:none;padding:10px 16px;border-radius:4px;font-size:14px;font-weight:600;">View issue</a>
+    `
+    : '';
+
+  const issueLine = safeTaskName
+    ? `${safeTaskName}${safeTaskSummary ? ` - ${safeTaskSummary}` : ''}`
+    : safeTaskSummary;
+
+  return `<!doctype html>
+<html>
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${safeTitle}</title>
+  </head>
+  <body style="margin:0;padding:0;background-color:#f4f5f7;font-family:Arial, Helvetica, sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;background-color:#f4f5f7;">
+      <tr>
+        <td align="center" style="padding:24px 12px;">
+          <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="border-collapse:collapse;background-color:#ffffff;border:1px solid #dfe1e6;border-radius:6px;overflow:hidden;">
+            <tr>
+              <td style="background:#0747a6;color:#ffffff;padding:16px 24px;font-size:16px;font-weight:600;">Sprinto</td>
+            </tr>
+            <tr>
+              <td style="padding:24px 24px 12px 24px;">
+                <div style="font-size:12px;color:#5e6c84;margin-bottom:8px;">Notification</div>
+                <div style="font-size:18px;color:#172b4d;font-weight:600;margin-bottom:6px;">${safeTitle}</div>
+                ${issueLine ? `<div style="font-size:14px;color:#42526e;">${issueLine}</div>` : ''}
+                <div style="margin-top:12px;">${statusBadge}</div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:0 24px 16px 24px;">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+                  ${detailRows}
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:0 24px 24px 24px;">
+                <div style="font-size:13px;color:#5e6c84;font-weight:600;margin-bottom:8px;">Update</div>
+                <div style="font-size:14px;line-height:1.5;color:#172b4d;">${safeBody}</div>
+              </td>
+            </tr>
+            ${descriptionSection}
+            <tr>
+              <td style="padding:0 24px 24px 24px;">
+                ${ctaButton}
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:16px 24px;background:#fafbfc;color:#7a869a;font-size:12px;">
+                You are receiving this because you are watching this issue.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
 };
 
 const createNotification = async ({
@@ -407,7 +580,7 @@ const app = new Hono()
 
       const { data: task } = await supabase
         .from(TASKS_TABLE)
-        .select('id,workspaceId,assigneeId,reporterId,name,summary,projectId')
+        .select('id,workspaceId,assigneeId,reporterId,name,summary,projectId,status,workType,description')
         .eq('id', taskId)
         .single();
       if (!task) return ctx.json({ error: 'Task not found.' }, 404);
@@ -502,11 +675,24 @@ const app = new Hono()
             },
           });
 
+          const emailHtml = buildNotificationEmailHtml({
+            title,
+            body: bodyText,
+            taskName: taskName,
+            taskSummary,
+            status: task.status ?? null,
+            workType: task.workType ?? null,
+            assignee: assigneeUser?.name ?? null,
+            reporter: reporterUser?.name ?? null,
+            description: task.description ?? null,
+            link: notificationLink,
+          });
+
           await sendNotificationEmail({
             supabase,
             to: recipient.email,
             subject: title,
-            html: `<p>${title}</p><p>${bodyText}</p>`,
+            html: emailHtml,
           });
         }
       } catch (error) {
@@ -598,11 +784,24 @@ const app = new Hono()
           },
         });
 
+        const emailHtml = buildNotificationEmailHtml({
+          title,
+          body: bodyText,
+          taskName: task.name,
+          taskSummary: task.summary ?? '',
+          status: task.status ?? null,
+          workType: task.workType ?? null,
+          assignee: assigneeUser.name,
+          reporter: user.name ?? null,
+          description: task.description ?? null,
+          link: notificationLink,
+        });
+
         await sendNotificationEmail({
           supabase,
           to: assigneeUser.email,
           subject: title,
-          html: `<p>${title}</p><p>${bodyText}</p>`,
+          html: emailHtml,
         });
       }
     } catch (error) {
@@ -689,6 +888,7 @@ const app = new Hono()
     if (assigneeId !== undefined && assigneeId !== existingTask.assigneeId) {
       try {
         const assigneeUser = await getMemberUser(supabase, assigneeId);
+        const reporterUser = await getMemberUser(supabase, task.reporterId);
 
         if (assigneeUser && assigneeUser.userId !== user.$id) {
           const title = `${user.name} assigned you ${task.name}`;
@@ -711,11 +911,24 @@ const app = new Hono()
             },
           });
 
+          const emailHtml = buildNotificationEmailHtml({
+            title,
+            body: bodyText,
+            taskName: task.name,
+            taskSummary: task.summary ?? '',
+            status: task.status ?? null,
+            workType: task.workType ?? null,
+            assignee: assigneeUser.name,
+            reporter: reporterUser?.name ?? null,
+            description: task.description ?? null,
+            link: notificationLink,
+          });
+
           await sendNotificationEmail({
             supabase,
             to: assigneeUser.email,
             subject: title,
-            html: `<p>${title}</p><p>${bodyText}</p>`,
+            html: emailHtml,
           });
         }
       } catch (error) {
