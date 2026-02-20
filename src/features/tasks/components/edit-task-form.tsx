@@ -1,38 +1,55 @@
-'use client';
+"use client";
 
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useRef, useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { toast } from 'sonner';
-import { z } from 'zod';
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useRef, useState } from "react";
+import { useForm } from "react-hook-form";
+import { toast } from "sonner";
+import { z } from "zod";
 
-import { DottedSeparator } from '@/components/dotted-separator';
-import { ImageLightbox } from '@/components/image-lightbox';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { MemberAvatar } from '@/features/members/components/member-avatar';
-import { ProjectAvatar } from '@/features/projects/components/project-avatar';
-import { useUpdateTask } from '@/features/tasks/api/use-update-task';
-import { uploadTaskAttachments } from '@/features/tasks/attachments';
-import { createTaskSchema } from '@/features/tasks/schema';
+import { DottedSeparator } from "@/components/dotted-separator";
+import { ImageLightbox } from "@/components/image-lightbox";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { MemberAvatar } from "@/features/members/components/member-avatar";
+import { ProjectAvatar } from "@/features/projects/components/project-avatar";
+import { useUpdateTask } from "@/features/tasks/api/use-update-task";
+import { uploadTaskAttachments } from "@/features/tasks/attachments";
+import { createTaskSchema } from "@/features/tasks/schema";
+import {
+  TaskPriority,
   type Task,
   TaskStatus,
   TaskWorkType,
+  TASK_PRIORITY_LABELS,
+  TASK_PRIORITY_ORDER,
   TASK_STATUS_LABELS,
   TASK_STATUS_ORDER,
   TASK_WORK_TYPE_LABELS,
   TASK_WORK_TYPE_ORDER,
-} from '@/features/tasks/types';
-import { cn } from '@/lib/utils';
+} from "@/features/tasks/types";
+import { cn } from "@/lib/utils";
 
-import { WorkTypeIcon } from './work-type-icon';
+import { WorkTypeIcon } from "./work-type-icon";
 
-const isImage = (url: string) => /\.(png|jpe?g|gif|webp|bmp|svg)(\?.*)?$/i.test(url);
+const isImage = (url: string) =>
+  /\.(png|jpe?g|gif|webp|bmp|svg)(\?.*)?$/i.test(url);
 const isVideo = (url: string) => /\.(mp4|webm|ogg|mov|m4v)(\?.*)?$/i.test(url);
 
 interface EditTaskFormProps {
@@ -42,36 +59,51 @@ interface EditTaskFormProps {
   initialValues: Task;
 }
 
-export const EditTaskForm = ({ onCancel, memberOptions, projectOptions, initialValues }: EditTaskFormProps) => {
+export const EditTaskForm = ({
+  onCancel,
+  memberOptions,
+  projectOptions,
+  initialValues,
+}: EditTaskFormProps) => {
   const { mutate: createTask, isPending } = useUpdateTask();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [attachments, setAttachments] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
-  const [existingAttachments, setExistingAttachments] = useState<string[]>(initialValues.attachments ?? []);
-  const [lightboxState, setLightboxState] = useState<{ images: string[]; index: number } | null>(null);
+  const [existingAttachments, setExistingAttachments] = useState<string[]>(
+    initialValues.attachments ?? []
+  );
+  const [lightboxState, setLightboxState] = useState<{
+    images: string[];
+    index: number;
+  } | null>(null);
 
   const editTaskSchema = createTaskSchema.omit({ workspaceId: true });
   type EditTaskFormValues = z.infer<typeof editTaskSchema>;
 
   const editTaskForm = useForm<EditTaskFormValues>({
-    resolver: zodResolver(editTaskSchema as unknown as Parameters<typeof zodResolver>[0]),
+    resolver: zodResolver(
+      editTaskSchema as unknown as Parameters<typeof zodResolver>[0]
+    ),
     defaultValues: {
       summary: initialValues.summary,
       status: initialValues.status,
       workType: initialValues.workType ?? TaskWorkType.TASK,
+      priority: initialValues.priority ?? TaskPriority.MEDIUM,
       projectId: initialValues.projectId,
       assigneeId: initialValues.assigneeId,
-      description: initialValues.description ?? '',
+      description: initialValues.description ?? "",
       attachments: initialValues.attachments ?? [],
     },
   });
 
   const handleFiles = (files: FileList | File[]) => {
     const incoming = Array.from(files);
-    const allowed = incoming.filter((file) => file.type.startsWith('image/') || file.type.startsWith('video/'));
+    const allowed = incoming.filter(
+      (file) => file.type.startsWith("image/") || file.type.startsWith("video/")
+    );
 
     if (allowed.length !== incoming.length) {
-      toast.error('Only images and videos are allowed.');
+      toast.error("Only images and videos are allowed.");
     }
 
     setAttachments((prev) => [...prev, ...allowed]);
@@ -79,7 +111,7 @@ export const EditTaskForm = ({ onCancel, memberOptions, projectOptions, initialV
 
   const onSubmit = async (values: EditTaskFormValues) => {
     if (!values.projectId) {
-      toast.error('Project is required.');
+      toast.error("Project is required.");
       return;
     }
 
@@ -105,11 +137,11 @@ export const EditTaskForm = ({ onCancel, memberOptions, projectOptions, initialV
             setAttachments([]);
             onCancel?.();
           },
-        },
+        }
       );
     } catch (error) {
-      console.error('[TASK_ATTACHMENTS_UPLOAD]:', error);
-      toast.error('Failed to upload attachments.');
+      console.error("[TASK_ATTACHMENTS_UPLOAD]:", error);
+      toast.error("Failed to upload attachments.");
     } finally {
       setIsUploading(false);
     }
@@ -117,16 +149,27 @@ export const EditTaskForm = ({ onCancel, memberOptions, projectOptions, initialV
 
   const renderExistingAttachmentPreview = (url: string) => {
     if (isImage(url)) {
-      const imageAttachments = existingAttachments.filter((item) => isImage(item));
+      const imageAttachments = existingAttachments.filter((item) =>
+        isImage(item)
+      );
       const index = imageAttachments.indexOf(url);
       return (
         <button
           type="button"
           className="group relative w-full cursor-zoom-in"
-          onClick={() => setLightboxState({ images: imageAttachments, index: Math.max(index, 0) })}
+          onClick={() =>
+            setLightboxState({
+              images: imageAttachments,
+              index: Math.max(index, 0),
+            })
+          }
           aria-label="Open image preview"
         >
-          <img src={url} alt="Attachment" className="h-36 w-full object-cover" />
+          <img
+            src={url}
+            alt="Attachment"
+            className="h-36 w-full object-cover"
+          />
           <span className="pointer-events-none absolute inset-0 bg-black/0 transition group-hover:bg-black/10" />
         </button>
       );
@@ -170,7 +213,11 @@ export const EditTaskForm = ({ onCancel, memberOptions, projectOptions, initialV
                     <FormLabel>Summary</FormLabel>
 
                     <FormControl>
-                      <Input {...field} type="text" placeholder="Write a short summary" />
+                      <Input
+                        {...field}
+                        type="text"
+                        placeholder="Write a short summary"
+                      />
                     </FormControl>
 
                     <FormMessage />
@@ -187,7 +234,11 @@ export const EditTaskForm = ({ onCancel, memberOptions, projectOptions, initialV
                     <FormLabel>Description</FormLabel>
 
                     <FormControl>
-                      <Textarea {...field} placeholder="Add a detailed description" rows={5} />
+                      <Textarea
+                        {...field}
+                        placeholder="Add a detailed description"
+                        rows={5}
+                      />
                     </FormControl>
 
                     <FormMessage />
@@ -203,9 +254,20 @@ export const EditTaskForm = ({ onCancel, memberOptions, projectOptions, initialV
                   <FormItem>
                     <FormLabel>Assignee</FormLabel>
 
-                    <Select disabled={isPending} defaultValue={field.value} value={field.value} onValueChange={field.onChange}>
+                    <Select
+                      disabled={isPending}
+                      defaultValue={field.value}
+                      value={field.value}
+                      onValueChange={field.onChange}
+                    >
                       <FormControl>
-                        <SelectTrigger>{field.value ? <SelectValue placeholder="Select assignee" /> : 'Select assignee'}</SelectTrigger>
+                        <SelectTrigger>
+                          {field.value ? (
+                            <SelectValue placeholder="Select assignee" />
+                          ) : (
+                            "Select assignee"
+                          )}
+                        </SelectTrigger>
                       </FormControl>
 
                       <FormMessage />
@@ -214,7 +276,10 @@ export const EditTaskForm = ({ onCancel, memberOptions, projectOptions, initialV
                         {memberOptions.map((member) => (
                           <SelectItem key={member.id} value={member.id}>
                             <div className="flex items-center gap-x-2">
-                              <MemberAvatar className="size-6" name={member.name} />
+                              <MemberAvatar
+                                className="size-6"
+                                name={member.name}
+                              />
                               {member.name}
                             </div>
                           </SelectItem>
@@ -233,9 +298,20 @@ export const EditTaskForm = ({ onCancel, memberOptions, projectOptions, initialV
                   <FormItem>
                     <FormLabel>Status</FormLabel>
 
-                    <Select disabled={isPending} defaultValue={field.value} value={field.value} onValueChange={field.onChange}>
+                    <Select
+                      disabled={isPending}
+                      defaultValue={field.value}
+                      value={field.value}
+                      onValueChange={field.onChange}
+                    >
                       <FormControl>
-                        <SelectTrigger>{field.value ? <SelectValue placeholder="Select status" /> : 'Select status'}</SelectTrigger>
+                        <SelectTrigger>
+                          {field.value ? (
+                            <SelectValue placeholder="Select status" />
+                          ) : (
+                            "Select status"
+                          )}
+                        </SelectTrigger>
                       </FormControl>
 
                       <FormMessage />
@@ -260,9 +336,20 @@ export const EditTaskForm = ({ onCancel, memberOptions, projectOptions, initialV
                   <FormItem>
                     <FormLabel>Work Type</FormLabel>
 
-                    <Select disabled={isPending} defaultValue={field.value ?? TaskWorkType.TASK} value={field.value ?? TaskWorkType.TASK} onValueChange={field.onChange}>
+                    <Select
+                      disabled={isPending}
+                      defaultValue={field.value ?? TaskWorkType.TASK}
+                      value={field.value ?? TaskWorkType.TASK}
+                      onValueChange={field.onChange}
+                    >
                       <FormControl>
-                        <SelectTrigger>{field.value ? <SelectValue placeholder="Select work type" /> : 'Select work type'}</SelectTrigger>
+                        <SelectTrigger>
+                          {field.value ? (
+                            <SelectValue placeholder="Select work type" />
+                          ) : (
+                            "Select work type"
+                          )}
+                        </SelectTrigger>
                       </FormControl>
 
                       <FormMessage />
@@ -285,14 +372,63 @@ export const EditTaskForm = ({ onCancel, memberOptions, projectOptions, initialV
               <FormField
                 disabled={isPending}
                 control={editTaskForm.control}
+                name="priority"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Priority</FormLabel>
+
+                    <Select
+                      disabled={isPending}
+                      defaultValue={field.value}
+                      value={field.value}
+                      onValueChange={field.onChange}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          {field.value ? (
+                            <SelectValue placeholder="Select priority" />
+                          ) : (
+                            "Select priority"
+                          )}
+                        </SelectTrigger>
+                      </FormControl>
+
+                      <FormMessage />
+
+                      <SelectContent>
+                        {TASK_PRIORITY_ORDER.map((priority) => (
+                          <SelectItem key={priority} value={priority}>
+                            {TASK_PRIORITY_LABELS[priority]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                disabled={isPending}
+                control={editTaskForm.control}
                 name="projectId"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Project</FormLabel>
 
-                    <Select disabled={isPending} defaultValue={field.value} value={field.value} onValueChange={field.onChange}>
+                    <Select
+                      disabled={isPending}
+                      defaultValue={field.value}
+                      value={field.value}
+                      onValueChange={field.onChange}
+                    >
                       <FormControl>
-                        <SelectTrigger>{field.value ? <SelectValue placeholder="Select project" /> : 'Select project'}</SelectTrigger>
+                        <SelectTrigger>
+                          {field.value ? (
+                            <SelectValue placeholder="Select project" />
+                          ) : (
+                            "Select project"
+                          )}
+                        </SelectTrigger>
                       </FormControl>
 
                       <FormMessage />
@@ -301,7 +437,11 @@ export const EditTaskForm = ({ onCancel, memberOptions, projectOptions, initialV
                         {projectOptions.map((project) => (
                           <SelectItem key={project.id} value={project.id}>
                             <div className="flex items-center gap-x-2">
-                              <ProjectAvatar className="size-6" name={project.name} image={project.imageUrl} />
+                              <ProjectAvatar
+                                className="size-6"
+                                name={project.name}
+                                image={project.imageUrl}
+                              />
                               {project.name}
                             </div>
                           </SelectItem>
@@ -328,8 +468,8 @@ export const EditTaskForm = ({ onCancel, memberOptions, projectOptions, initialV
 
                 <div
                   className={cn(
-                    'flex min-h-24 flex-col items-center justify-center rounded-md border border-dashed border-input bg-muted/40 px-4 py-3 text-sm text-muted-foreground',
-                    (isPending || isUploading) && 'opacity-60',
+                    "flex min-h-24 flex-col items-center justify-center rounded-md border border-dashed border-input bg-muted/40 px-4 py-3 text-sm text-muted-foreground",
+                    (isPending || isUploading) && "opacity-60"
                   )}
                   onDragOver={(event) => event.preventDefault()}
                   onDrop={(event) => {
@@ -352,24 +492,36 @@ export const EditTaskForm = ({ onCancel, memberOptions, projectOptions, initialV
                   onChange={(event) => {
                     if (!event.target.files) return;
                     handleFiles(event.target.files);
-                    event.target.value = '';
+                    event.target.value = "";
                   }}
                 />
 
                 {existingAttachments.length > 0 && (
                   <div className="grid gap-3 sm:grid-cols-2">
                     {existingAttachments.map((url) => (
-                      <div key={url} className="overflow-hidden rounded-md border border-input bg-white">
+                      <div
+                        key={url}
+                        className="overflow-hidden rounded-md border border-input bg-white"
+                      >
                         {renderExistingAttachmentPreview(url)}
                         <div className="flex items-center justify-between gap-x-2 border-t border-input p-2 text-xs">
-                          <a className="truncate text-blue-600 hover:underline" href={url} target="_blank" rel="noreferrer">
+                          <a
+                            className="truncate text-blue-600 hover:underline"
+                            href={url}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
                             Open
                           </a>
                           <Button
                             type="button"
                             size="xs"
                             variant="ghost"
-                            onClick={() => setExistingAttachments((prev) => prev.filter((item) => item !== url))}
+                            onClick={() =>
+                              setExistingAttachments((prev) =>
+                                prev.filter((item) => item !== url)
+                              )
+                            }
                           >
                             Remove
                           </Button>
@@ -382,13 +534,20 @@ export const EditTaskForm = ({ onCancel, memberOptions, projectOptions, initialV
                 {attachments.length > 0 && (
                   <div className="flex flex-col gap-y-2 rounded-md border border-input bg-white p-2">
                     {attachments.map((file, index) => (
-                      <div key={`${file.name}-${index}`} className="flex items-center justify-between text-xs">
+                      <div
+                        key={`${file.name}-${index}`}
+                        className="flex items-center justify-between text-xs"
+                      >
                         <span className="truncate">{file.name}</span>
                         <Button
                           type="button"
                           size="xs"
                           variant="ghost"
-                          onClick={() => setAttachments((prev) => prev.filter((_, itemIndex) => itemIndex !== index))}
+                          onClick={() =>
+                            setAttachments((prev) =>
+                              prev.filter((_, itemIndex) => itemIndex !== index)
+                            )
+                          }
                         >
                           Remove
                         </Button>
@@ -414,13 +573,17 @@ export const EditTaskForm = ({ onCancel, memberOptions, projectOptions, initialV
                 size="lg"
                 variant="secondary"
                 onClick={onCancel}
-                className={cn(!onCancel && 'invisible')}
+                className={cn(!onCancel && "invisible")}
               >
                 Cancel
               </Button>
 
-              <Button disabled={isPending || isUploading} type="submit" size="lg">
-                {isUploading ? 'Uploading...' : 'Save Changes'}
+              <Button
+                disabled={isPending || isUploading}
+                type="submit"
+                size="lg"
+              >
+                {isUploading ? "Uploading..." : "Save Changes"}
               </Button>
             </div>
           </form>

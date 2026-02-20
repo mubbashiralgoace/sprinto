@@ -1,14 +1,20 @@
-import { Pencil } from 'lucide-react';
+import { Pencil } from "lucide-react";
 
-import { DottedSeparator } from '@/components/dotted-separator';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { useEditTaskModal } from '@/features/tasks/hooks/use-edit-task-modal';
-import { type Task, TaskWorkType, TASK_STATUS_LABELS, TASK_WORK_TYPE_LABELS } from '@/features/tasks/types';
+import { DottedSeparator } from "@/components/dotted-separator";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { useEditTaskModal } from "@/features/tasks/hooks/use-edit-task-modal";
+import {
+  type Task,
+  TaskWorkType,
+  TASK_STATUS_LABELS,
+  TASK_WORK_TYPE_LABELS,
+} from "@/features/tasks/types";
 
-import { AssigneeSelect } from './assignee-select';
-import { OverviewProperty } from './overview-property';
-import { TaskDate } from './task-date';
+import { AssigneeSelect } from "./assignee-select";
+import { OverviewProperty } from "./overview-property";
+import { PrioritySelect } from "./priority-select";
+import { TaskDate } from "./task-date";
 
 interface TaskOverviewProps {
   task: Task;
@@ -55,11 +61,23 @@ export const TaskOverview = ({ task }: TaskOverviewProps) => {
           </OverviewProperty>
 
           <OverviewProperty label="Status">
-            <Badge variant={task.status}>{TASK_STATUS_LABELS[task.status]}</Badge>
+            <Badge variant={task.status}>
+              {TASK_STATUS_LABELS[task.status]}
+            </Badge>
+          </OverviewProperty>
+
+          <OverviewProperty label="Priority">
+            <PrioritySelect
+              taskId={task.$id}
+              priority={task.priority}
+              triggerClassName="min-w-[120px] justify-between"
+            />
           </OverviewProperty>
 
           <OverviewProperty label="Work Type">
-            <Badge variant="secondary">{TASK_WORK_TYPE_LABELS[task.workType ?? TaskWorkType.TASK]}</Badge>
+            <Badge variant="secondary">
+              {TASK_WORK_TYPE_LABELS[task.workType ?? TaskWorkType.TASK]}
+            </Badge>
           </OverviewProperty>
         </div>
       </div>

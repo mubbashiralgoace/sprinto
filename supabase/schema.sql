@@ -34,6 +34,7 @@ create table if not exists public.tasks (
   summary text not null default '',
   status text not null,
   "workType" text not null default 'TASK',
+  priority text not null default 'MEDIUM',
   "workspaceId" uuid not null references public.workspaces(id) on delete cascade,
   "projectId" uuid not null references public.projects(id) on delete cascade,
   "reporterId" uuid references public.members(id) on delete set null,
@@ -98,3 +99,4 @@ create index if not exists idx_tasks_workspace on public.tasks ("workspaceId");
 create index if not exists idx_tasks_project on public.tasks ("projectId");
 create index if not exists idx_tasks_assignee on public.tasks ("assigneeId");
 create index if not exists idx_tasks_status on public.tasks (status);
+create index if not exists idx_tasks_priority on public.tasks (priority);
